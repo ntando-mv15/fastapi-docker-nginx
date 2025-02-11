@@ -44,10 +44,11 @@ jobs:
         docker-compose --version
 
     - name: Set up Cloud SDK
-      uses: google-github-actions/setup-gcloud@v0
+      uses: google-github-actions/setup-gcloud@v1
       with:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
         service_account_key: ${{ secrets.GCP_SA_KEY }}
+        install_components: 'gke-gcloud-auth-plugin'
         export_default_credentials: true
 
     - name: Login to Docker Hub
@@ -65,20 +66,37 @@ jobs:
 
     - name: Deploy to GCP VM
       run: |
-        # Create SSH key file
-        echo "${{ secrets.GCP_SSH_PRIVATE_KEY }}" > ./private_key
-        chmod 600 ./private_key
-        
-        # Deploy using gcloud compute ssh
-        gcloud compute ssh ${{ secrets.GCP_VM_NAME }} \
+        # Configure OS Login
+        gcloud compute project-info add-metadata \
+          --metadata enable-oslogin=TRUE
+
+        # Get the instance's external IP
+        INSTANCE_IP=$(gcloud compute instances describe ${{ secrets.GCP_VM_NAME }} \
+          --zone=${{ secrets.GCP_ZONE }} \
+          --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
+
+        # Use gcloud to execute commands on the VM
+        gcloud compute ssh --quiet ${{ secrets.GCP_VM_NAME }} \
           --project=${{ secrets.GCP_PROJECT_ID }} \
           --zone=${{ secrets.GCP_ZONE }} \
-          --ssh-key-file=./private_key \
           --command='
             echo "Starting the deploy process on GCP VM..."
             
             # Update system packages
             sudo apt-get update
+            
+            # Install Docker if not installed
+            if ! command -v docker &> /dev/null; then
+              curl -fsSL https://get.docker.com -o get-docker.sh
+              sudo sh get-docker.sh
+              sudo usermod -aG docker $USER
+            fi
+            
+            # Install Docker Compose if not installed
+            if ! command -v docker-compose &> /dev/null; then
+              sudo curl -L "https://github.com/docker/compose/releases/download/v2.17.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+              sudo chmod +x /usr/local/bin/docker-compose
+            fi
             
             # Clone or pull repository
             if [ ! -d "~/fastapi-book-project" ]; then
@@ -108,6 +126,3 @@ jobs:
             # Clean up
             docker image prune -f
           '
-        
-        # Clean up SSH key
-        rm ./private_key
