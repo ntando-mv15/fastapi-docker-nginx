@@ -1,0 +1,113 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run tests
+      run: |
+        pytest
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+
+    - name: Install Docker Compose
+      run: |
+        sudo curl -L "https://github.com/docker/compose/releases/download/v2.17.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+        sudo chmod +x /usr/local/bin/docker-compose
+        docker-compose --version
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v0
+      with:
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+        service_account_key: ${{ secrets.GCP_SA_KEY }}
+        export_default_credentials: true
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Build and push Docker images
+      run: |
+        docker-compose build --no-cache
+        docker images
+        docker tag fastapi-book-project-api:latest ${{ secrets.DOCKER_USERNAME }}/fastapi-book-project:latest
+        docker push ${{ secrets.DOCKER_USERNAME }}/fastapi-book-project:latest
+
+    - name: Deploy to GCP VM
+      run: |
+        # Create SSH key file
+        echo "${{ secrets.GCP_SSH_PRIVATE_KEY }}" > ./private_key
+        chmod 600 ./private_key
+        
+        # Deploy using gcloud compute ssh
+        gcloud compute ssh ${{ secrets.GCP_VM_NAME }} \
+          --project=${{ secrets.GCP_PROJECT_ID }} \
+          --zone=${{ secrets.GCP_ZONE }} \
+          --ssh-key-file=./private_key \
+          --command='
+            echo "Starting the deploy process on GCP VM..."
+            
+            # Update system packages
+            sudo apt-get update
+            
+            # Clone or pull repository
+            if [ ! -d "~/fastapi-book-project" ]; then
+              git clone https://github.com/citadelict/fastapi-book-project.git ~/fastapi-book-project
+            else
+              cd ~/fastapi-book-project && git pull origin main
+            fi
+            
+            # Navigate to project directory
+            cd ~/fastapi-book-project
+            
+            # Login to Docker Hub
+            echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+            
+            # Pull latest image
+            docker pull ${{ secrets.DOCKER_USERNAME }}/fastapi-book-project:latest
+            
+            # Stop existing containers
+            docker-compose down
+            
+            # Start new containers
+            docker-compose up -d
+            
+            # Verify deployment
+            docker-compose ps
+            
+            # Clean up
+            docker image prune -f
+          '
+        
+        # Clean up SSH key
+        rm ./private_key
