@@ -60,7 +60,7 @@ jobs:
       run: |
         docker-compose build --no-cache 
         docker images 
-        docker tag fastapi-book-project_api:latest ${{ secrets.DOCKER_USERNAME }}/fastapi-book-project:latest
+        docker tag fastapi-book-project-api:latest ${{ secrets.DOCKER_USERNAME }}/fastapi-book-project:latest
         docker push ${{ secrets.DOCKER_USERNAME }}/fastapi-book-project:latest
 
     - name: Deploy to EC2
