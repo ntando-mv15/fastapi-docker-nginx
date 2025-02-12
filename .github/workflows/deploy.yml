@@ -70,12 +70,14 @@ jobs:
             echo "Starting the deploy process on EC2..."
             sudo apt-get update
 
-            # Delete the old repository and clone it again
+            # Delete the old repository and clone it again, even if it is not empty
             if [ -d "~/fastapi-book-project" ]; then
-               rm -rf ~/fastapi-book-project
+               echo "Deleting old repository..."
+               sudo rm -rf ~/fastapi-book-project  # Ensure it deletes even non-empty folders
             fi
 
             # Clone the repository
+            echo "Cloning the repository..."
             git clone ${{ github.server_url }}/${{ github.repository }}.git ~/fastapi-book-project
 
             cd ~/fastapi-book-project
@@ -86,14 +88,16 @@ jobs:
             docker pull citatech/fastapi-book-project:latest
 
             # Update the docker-compose.yml to use the pulled image
+            echo "Updating docker-compose.yml to use the latest image..."
             sed -i 's|build: .|image: citatech/fastapi-book-project:latest|g' docker-compose.yml
 
             # Restart services 
             echo "Restarting services..."
             docker-compose down
-            docker-compose up -d --force-recreate
+            docker-compose up -d --force-recreate  # This ensures services are recreated using the latest image
 
             # Verify services are running
+            echo "Verifying running services..."
             docker-compose ps
 
             # Clean up unused images
