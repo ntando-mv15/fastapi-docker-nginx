@@ -58,8 +58,7 @@ jobs:
           docker-compose -f docker-compose.yml build
           
           # Tag and push FastAPI image with your specific image name
-          docker tag fastapi-book-project:latest citatech/fastapi-book-project:latest
-          docker push citatech/fastapi-book-project:latest
+          docker-compose push api
 
       - name: Deploy to EC2
         uses: appleboy/ssh-action@master
