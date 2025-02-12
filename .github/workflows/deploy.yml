@@ -10,15 +10,19 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: '3.9'
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+
       - name: Run tests
         run: |
           pytest
@@ -28,10 +32,11 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
 
       - name: Install Docker Compose
         run: |
@@ -39,67 +44,41 @@ jobs:
           sudo chmod +x /usr/local/bin/docker-compose
           docker-compose --version
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
-
       - name: Login to Docker Hub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Build and push Docker images
+      - name: Build and push Docker image for FastAPI
         run: |
           cd ${{ github.workspace }}
-
-          # Build and push Docker images
+          # Assign the Docker username to a shell variable
+          DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
+          # Build the Docker image for the FastAPI application
           docker-compose -f docker-compose.yml build
-          docker-compose push api  # Ensure the correct service is being pushed
+          # Tag the FastAPI image for Docker Hub
+          docker tag citatech/fastapi-book-project:latest ${DOCKER_USERNAME}/fastapi-book-project:latest
+          # Push the FastAPI image to Docker Hub
+          docker push ${DOCKER_USERNAME}/fastapi-book-project:latest
 
-      - name: Deploy to EC2
+      - name: Update docker-compose.yml on EC2 (if needed)
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           script: |
-            echo "Starting the deploy process on EC2..."
-            sudo apt-get update
-
-            # Delete the old repository if it exists
-            if [ -d "~/fastapi-book-project" ]; then
-               echo "Deleting old repository..."
-               sudo rm -rf ~/fastapi-book-project  # Ensure it deletes even non-empty folders
-            fi
-
-            # Clone the repository again (fresh clone)
-            echo "Cloning the repository..."
-            git clone https://github.com/${{ github.repository }}.git ~/fastapi-book-project
-
-            cd ~/fastapi-book-project
-
-            # Pull the latest FastAPI image (forcing it to pull latest)
-            echo "Pulling the latest images..."
-            echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
-            docker pull citatech/fastapi-book-project:latest
-
-            # Update the docker-compose.yml to use the pulled image
-            echo "Updating docker-compose.yml to use the latest image..."
-            sed -i 's|build: .|image: citatech/fastapi-book-project:latest|g' docker-compose.yml
-
-            # Restart services 
-            echo "Restarting services..."
+            echo "Updating docker-compose.yml on EC2..."
+            # Assign the Docker username to a shell variable
+            DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
+            sed -i "s|build: .|image: $DOCKER_USERNAME/fastapi-book-project:latest|g" docker-compose.yml
+            # Restart services
+            echo "Restarting services on EC2..."
             docker-compose down
-            docker-compose up -d --force-recreate  # This ensures services are recreated using the latest image
-
-            # Verify services are running
-            echo "Verifying running services..."
-            docker-compose ps
-
+            docker-compose up -d --force-recreate  # Recreate containers with the latest image
             # Clean up unused images
-            echo "Cleaning up unused images..."
             docker image prune -f
+            # Ensure Watchtower is running to monitor the containers
+            docker ps -a | grep watchtower || docker run -d --name watchtower --restart always \
+              -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower:latest
