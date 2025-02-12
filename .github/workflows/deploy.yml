@@ -54,7 +54,7 @@ jobs:
       - name: Build and push Docker images
         run: |
           # Build services
-          docker-compose build
+          docker-compose -f docker-compose.yml build
           
           # Tag and push FastAPI image with your specific image name
           docker tag fastapi-book-project:latest citatech/fastapi-book-project:latest
