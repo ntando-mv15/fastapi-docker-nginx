@@ -53,10 +53,10 @@ jobs:
           docker-compose -f docker-compose.yml build
 
           # Tag the FastAPI image for Docker Hub
-          docker tag citatech/fastapi-book-project:latest ${{ secrets.DOCKER_USERNAME }}/fastapi-book-project:latest
+          docker tag citatech/fastapi-book-project:latest citatech/fastapi-book-project:latest
 
           # Push the FastAPI image to Docker Hub
-          docker push ${{ secrets.DOCKER_USERNAME }}/fastapi-book-project:latest
+          docker push citatech/fastapi-book-project:latest
 
       - name: Update docker-compose.yml on EC2 (if needed)
         uses: appleboy/ssh-action@master
@@ -67,7 +67,7 @@ jobs:
           script: |
             echo "Updating docker-compose.yml on EC2..."
             # Update the docker-compose.yml to use the latest image
-            sed -i 's|build: .|image: ${{ secrets.DOCKER_USERNAME }}/fastapi-book-project:latest|g' docker-compose.yml
+            sed -i 's|build: .|image: citatechfastapi-book-project:latest|g' docker-compose.yml
 
             # Restart services
             echo "Restarting services on EC2..."
