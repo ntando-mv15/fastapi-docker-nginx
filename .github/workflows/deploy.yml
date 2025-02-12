@@ -10,7 +10,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v1
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
@@ -48,15 +48,14 @@ jobs:
       - name: Build and push Docker image for FastAPI
         run: |
           cd ${{ github.workspace }}
-
+          # Assign the Docker username to a shell variable
+          DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
           # Build the Docker image for the FastAPI application
           docker-compose -f docker-compose.yml build
-
           # Tag the FastAPI image for Docker Hub
-          docker tag citatech/fastapi-book-project:latest ${{ secrets.DOCKER_USERNAME }}/fastapi-book-project:latest
-
+          docker tag citatech/fastapi-book-project:latest ${DOCKER_USERNAME}/fastapi-book-project:latest
           # Push the FastAPI image to Docker Hub
-          docker push ${{ secrets.DOCKER_USERNAME }}/fastapi-book-project:latest
+          docker push ${DOCKER_USERNAME}/fastapi-book-project:latest
 
       - name: Update docker-compose.yml on EC2 (if needed)
         uses: appleboy/ssh-action@master
@@ -66,17 +65,15 @@ jobs:
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           script: |
             echo "Updating docker-compose.yml on EC2..."
-            # Update the docker-compose.yml to use the latest image
-            sed -i 's|build: .|image: ${{ secrets.DOCKER_USERNAME }}/fastapi-book-project:latest|g' docker-compose.yml
-
+            # Use environment variables to safely interpolate the secret
+            DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
+            sed -i "s|build: .|image: $DOCKER_USERNAME/fastapi-book-project:latest|g" docker-compose.yml
             # Restart services
             echo "Restarting services on EC2..."
             docker-compose down
             docker-compose up -d --force-recreate  # Recreate containers with the latest image
-
             # Clean up unused images
             docker image prune -f
-
             # Ensure Watchtower is running to monitor the containers
             docker ps -a | grep watchtower || docker run -d --name watchtower --restart always \
               -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower:latest
