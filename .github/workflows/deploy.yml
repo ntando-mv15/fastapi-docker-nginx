@@ -72,9 +72,10 @@ jobs:
 
             # Delete the old repository and clone it again
             if [ -d "~/fastapi-book-project" ]; then
-              rm -rf ~/fastapi-book-project
+               rm -rf ~/fastapi-book-project
             fi
 
+            # Clone the repository
             git clone ${{ github.server_url }}/${{ github.repository }}.git ~/fastapi-book-project
 
             cd ~/fastapi-book-project
@@ -87,10 +88,10 @@ jobs:
             # Update the docker-compose.yml to use the pulled image
             sed -i 's|build: .|image: citatech/fastapi-book-project:latest|g' docker-compose.yml
 
-            # Restart services (with --pull to force pulling the latest image)
+            # Restart services 
             echo "Restarting services..."
             docker-compose down
-            docker-compose up -d --pull always  # <-- this ensures the image is always pulled before creating containers
+            docker-compose up -d --force-recreate
 
             # Verify services are running
             docker-compose ps
