@@ -67,6 +67,7 @@ jobs:
             # Remove any leftover containers with the same name
             echo "Removing any leftover containers..."
             docker ps -a --filter "name=fastapi_app" --format "{{.ID}}" | xargs -r docker rm -f || true
+            docker ps -a --filter "name=nginx" --format "{{.ID}}" | xargs -r docker rm -f || true
 
       - name: Delete Existing docker-compose.yml on EC2
         uses: appleboy/ssh-action@master
