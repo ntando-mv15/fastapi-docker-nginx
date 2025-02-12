@@ -144,3 +144,13 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Support
 
 For support, please open an issue in the GitHub repository.
+
+
+
+
+ if [ ! -d "~/fastapi-book-project" ]; then
+            git clone https://github.com/citadelict/fastapi-book-project.git ~/fastapi-book-project
+          else
+            cd ~/fastapi-book-project && git pull origin main
+          fi
+          cd ~/fastapi-book-project
