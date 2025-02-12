@@ -1,4 +1,5 @@
 name: CI/CD Pipeline
+
 on:
   push:
     branches: [ main ]
@@ -28,43 +29,37 @@ jobs:
     if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v2
-      
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
-        
+
       - name: Install Docker Compose
         run: |
           sudo curl -L "https://github.com/docker/compose/releases/download/v2.17.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
           sudo chmod +x /usr/local/bin/docker-compose
           docker-compose --version
-          
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
-          
+
       - name: Login to Docker Hub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-          
+
       - name: Build and push Docker images
         run: |
-          # Build services with no cache to force rebuild
-          docker-compose build --no-cache
+          # Build services
+          docker-compose -f docker-compose.yml build
           
-          # Tag with timestamp to force new image
-          TIMESTAMP=$(date +%s)
-          docker tag fastapi-book-project-api:latest citatech/fastapi-book-project:latest
-          docker tag fastapi-book-project-api:latest citatech/fastapi-book-project:${TIMESTAMP}
-          
-          # Push both tags
+          # Tag and push FastAPI image with your specific image name
           docker push citatech/fastapi-book-project:latest
-          docker push citatech/fastapi-book-project:${TIMESTAMP}
-          
+
       - name: Deploy to EC2
         uses: appleboy/ssh-action@master
         with:
@@ -73,30 +68,33 @@ jobs:
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           script: |
             echo "Starting the deploy process on EC2..."
-            
-            # Remove old directory and clone fresh
-            rm -rf ~/fastapi-book-project
+            sudo apt-get update
+
+            # Delete the old repository and clone it again
+            if [ -d "~/fastapi-book-project" ]; then
+              rm -rf ~/fastapi-book-project
+            fi
+
             git clone ${{ github.server_url }}/${{ github.repository }}.git ~/fastapi-book-project
-            
+
             cd ~/fastapi-book-project
-            
-            # Force remove all containers and images
-            docker-compose down -v
-            docker system prune -af
-            
-            # Pull the latest FastAPI image
+
+            # Pull the latest FastAPI image (forcing it to pull latest)
             echo "Pulling the latest images..."
             echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
             docker pull citatech/fastapi-book-project:latest
-            
-            # Update docker-compose.yml
+
+            # Update the docker-compose.yml to use the pulled image
             sed -i 's|build: .|image: citatech/fastapi-book-project:latest|g' docker-compose.yml
-            
-            # Force recreate containers
-            docker-compose up -d --force-recreate
-            
+
+            # Restart services (with --pull to force pulling the latest image)
+            echo "Restarting services..."
+            docker-compose down
+            docker-compose up -d --pull always  # <-- this ensures the image is always pulled before creating containers
+
             # Verify services are running
             docker-compose ps
-            
-            # Clean up
-            docker system prune -af
+
+            # Clean up unused images
+            echo "Cleaning up unused images..."
+            docker image prune -f
