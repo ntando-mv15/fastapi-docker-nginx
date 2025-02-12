@@ -39,13 +39,6 @@ jobs:
           sudo chmod +x /usr/local/bin/docker-compose
           docker-compose --version
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
-
       - name: Login to Docker Hub
         uses: docker/login-action@v2
         with:
@@ -65,34 +58,25 @@ jobs:
           # Push the FastAPI image to Docker Hub
           docker push ${{ secrets.DOCKER_USERNAME }}/fastapi-book-project:latest
 
-      - name: Deploy to EC2
+      - name: Update docker-compose.yml on EC2 (if needed)
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           script: |
-            echo "Starting the deploy process on EC2..."
-            sudo apt-get update
-
-            # Update the docker-compose.yml to use the latest image (no need to pull the image here)
-            echo "Updating docker-compose.yml to use the latest image..."
+            echo "Updating docker-compose.yml on EC2..."
+            # Update the docker-compose.yml to use the latest image
             sed -i 's|build: .|image: ${{ secrets.DOCKER_USERNAME }}/fastapi-book-project:latest|g' docker-compose.yml
 
             # Restart services
-            echo "Restarting services..."
+            echo "Restarting services on EC2..."
             docker-compose down
-            docker-compose up -d --force-recreate  # This ensures services are recreated using the latest image
-
-            # Verify services are running
-            echo "Verifying running services..."
-            docker-compose ps
+            docker-compose up -d --force-recreate  # Recreate containers with the latest image
 
             # Clean up unused images
-            echo "Cleaning up unused images..."
             docker image prune -f
 
-            # Ensure Watchtower is running (it will update containers when a new image is pushed)
-            echo "Ensuring Watchtower is running..."
+            # Ensure Watchtower is running to monitor the containers
             docker ps -a | grep watchtower || docker run -d --name watchtower --restart always \
               -v /var/run/docker.sock:/var/run/docker.sock containrrr/watchtower:latest
