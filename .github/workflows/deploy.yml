@@ -54,11 +54,11 @@ jobs:
 
       - name: Build and push Docker images
         run: |
-          # Build services
+          cd ${{ github.workspace }}
+
+          # Build and push Docker images
           docker-compose -f docker-compose.yml build
-          
-          # Tag and push FastAPI image with your specific image name
-          docker-compose push api
+          docker-compose push api  # Ensure the correct service is being pushed
 
       - name: Deploy to EC2
         uses: appleboy/ssh-action@master
@@ -70,15 +70,15 @@ jobs:
             echo "Starting the deploy process on EC2..."
             sudo apt-get update
 
-            # Delete the old repository and clone it again, even if it is not empty
+            # Delete the old repository if it exists
             if [ -d "~/fastapi-book-project" ]; then
                echo "Deleting old repository..."
                sudo rm -rf ~/fastapi-book-project  # Ensure it deletes even non-empty folders
             fi
 
-            # Clone the repository
+            # Clone the repository again (fresh clone)
             echo "Cloning the repository..."
-            git clone ${{ github.server_url }}/${{ github.repository }}.git ~/fastapi-book-project
+            git clone https://github.com/${{ github.repository }}.git ~/fastapi-book-project
 
             cd ~/fastapi-book-project
 
