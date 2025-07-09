@@ -87,14 +87,12 @@ docker compose down -v
 
 </br>
 
-##  Maintainer Notes
+## Notes
 
-This project was cloned and updated to support Docker for development and production, using Nginx.
+- This project was cloned and updated to support Docker for development and production, using Nginx.
 
-If you'd like to contribute or report issues, feel free to open a PR or issue on GitHub.
+- If you'd like to contribute or report issues, feel free to open a PR or issue on GitHub.
 
-## License
 
-As per original repository.
 
 
